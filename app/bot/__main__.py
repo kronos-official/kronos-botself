@@ -10,13 +10,13 @@ from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand, BotCommandScopeDefault, ErrorEvent
 from redis.asyncio import Redis
 
-from app.bot.handlers import auth, common, destinations, schedules, status, support
+from app.bot.handlers import account, auth, common, destinations, schedules, status, support
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 
 
 async def _configure_bot(bot: Bot, logger: logging.Logger) -> None:
-    """Configure Telegram-side bot UX once at startup."""
+    """Configure Telegram-side commands and remove any stale webhook."""
     try:
         await bot.set_my_commands(
             commands=[
@@ -46,6 +46,7 @@ async def main() -> None:
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
+
     redis = Redis.from_url(
         settings.redis_url,
         decode_responses=False,
@@ -57,7 +58,9 @@ async def main() -> None:
     storage = RedisStorage(redis=redis)
     dp = Dispatcher(storage=storage)
 
+    # Order matters: common/start first, then account/auth flows, then features.
     dp.include_router(common.router)
+    dp.include_router(account.router)
     dp.include_router(auth.router)
     dp.include_router(status.router)
     dp.include_router(destinations.router)
