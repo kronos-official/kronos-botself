@@ -302,6 +302,8 @@ async def run_autoclick_worker(account_id: int) -> None:
     logger.info("AutoClick worker started account_id=%s", account_id)
 
     try:
+        next_send_at = time.monotonic()
+
         while True:
             account, setting = await _load_worker_state(account_id)
 
@@ -325,6 +327,12 @@ async def run_autoclick_worker(account_id: int) -> None:
                 )
                 return
 
+            now = time.monotonic()
+            if now < next_send_at:
+                await asyncio.sleep(next_send_at - now)
+                continue
+
+            cycle_started = time.monotonic()
             try:
                 await execute_autoclick(
                     account_id=account.id,
@@ -342,6 +350,8 @@ async def run_autoclick_worker(account_id: int) -> None:
                     exc,
                 )
 
-            await asyncio.sleep(interval)
+            # The configured interval is the gap between fish messages,
+            # not an extra delay stacked on top of menu-search/click time.
+            next_send_at = cycle_started + interval
     finally:
         logger.info("AutoClick worker stopped account_id=%s", account_id)
