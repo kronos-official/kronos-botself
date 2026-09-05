@@ -28,26 +28,19 @@ path = Path("/app/miniapp/index.html")
 text = path.read_text(encoding="utf-8")
 
 head_marker = '<script src="/miniapp/dom-guard.js"></script>'
-body_marker = '<script src="/miniapp/runtime-v2.js"></script>'
+runtime_marker = '<script src="/miniapp/runtime-v2.js"></script>'
+autoclick_marker = '<script src="/miniapp/autoclick.js"></script>'
 
 if head_marker not in text:
-    text = text.replace(
-        "</head>",
-        f"{head_marker}</head>",
-        1,
-    )
+    text = text.replace("</head>", f"{head_marker}</head>", 1)
 
-if body_marker not in text:
-    text = text.replace(
-        "</body>",
-        f"{body_marker}</body>",
-        1,
-    )
+if runtime_marker not in text:
+    text = text.replace("</body>", f"{runtime_marker}</body>", 1)
 
-path.write_text(
-    text,
-    encoding="utf-8",
-)
+if autoclick_marker not in text:
+    text = text.replace("</body>", f"{autoclick_marker}</body>", 1)
+
+path.write_text(text, encoding="utf-8")
 PY
 
 RUN mkdir -p /data/sessions /data/media \
