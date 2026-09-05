@@ -1,26 +1,58 @@
 (() => {
-  'use strict';
+  "use strict";
 
-  const originalGetElementById = document.getElementById.bind(document);
+  const nativeGetElementById =
+    Document.prototype.getElementById;
+
   const fallbackElements = new Map();
 
-  document.getElementById = function kronosSafeGetElementById(id) {
-    const existing = originalGetElementById(id);
-    if (existing) return existing;
+  function createFallback(id) {
+    const element = document.createElement("span");
 
-    let fallback = fallbackElements.get(id);
-    if (fallback) return fallback;
+    element.id =
+      `__kronos_missing_${String(id).replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+    element.hidden = true;
+    element.dataset.kronosMissing = String(id);
 
-    fallback = document.createElement('span');
-    fallback.id = `__kronos_missing_${String(id).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    fallback.hidden = true;
-    fallback.dataset.kronosMissing = String(id);
+    return element;
+  }
+
+  Document.prototype.getElementById = function kronosGetElementById(id) {
+    const existing = nativeGetElementById.call(this, id);
+
+    if (existing) {
+      return existing;
+    }
+
+    if (fallbackElements.has(id)) {
+      return fallbackElements.get(id);
+    }
+
+    const fallback = createFallback(id);
+    fallbackElements.set(id, fallback);
 
     if (document.body) {
       document.body.appendChild(fallback);
     }
 
-    fallbackElements.set(id, fallback);
     return fallback;
   };
+
+  window.addEventListener("error", (event) => {
+    const message = String(event.message || "");
+
+    if (message.includes("Cannot set properties of null")) {
+      console.error(
+        "[Kronos DOM Guard] Detected null property assignment.",
+        event.error || event,
+      );
+    }
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error(
+      "[Kronos DOM Guard] Unhandled promise rejection:",
+      event.reason,
+    );
+  });
 })();

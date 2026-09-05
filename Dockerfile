@@ -11,6 +11,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml requirements.txt ./
+
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt \
     && pip install -e . --no-deps
@@ -23,12 +24,21 @@ COPY alembic ./alembic
 RUN python - <<'PY'
 from pathlib import Path
 
-path = Path('/app/miniapp/index.html')
-text = path.read_text(encoding='utf-8')
+path = Path("/app/miniapp/index.html")
+text = path.read_text(encoding="utf-8")
 marker = '<script src="/miniapp/dom-guard.js"></script>'
+
 if marker not in text:
-    text = text.replace('</head>', f'{marker}</head>', 1)
-    path.write_text(text, encoding='utf-8')
+    text = text.replace(
+        "</head>",
+        f"{marker}</head>",
+        1,
+    )
+
+path.write_text(
+    text,
+    encoding="utf-8",
+)
 PY
 
 RUN mkdir -p /data/sessions /data/media \
