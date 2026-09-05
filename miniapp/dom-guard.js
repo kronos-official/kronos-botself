@@ -2,13 +2,9 @@
   "use strict";
 
   window.addEventListener("error", (event) => {
-    const message = String(event.message || "");
-    if (!message) return;
-
     console.error(
       "[Kronos DOM Guard] Runtime error:",
-      message,
-      event.error || "",
+      event.error || event.message || event,
     );
   });
 
