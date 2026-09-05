@@ -32,7 +32,7 @@ services:
     build: .
     command: ["alembic", "upgrade", "head"]
     env_file:
-      - .env
+      - .env.app
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,7 +42,7 @@ services:
     build: .
     command: ["python", "-m", "app.bot"]
     env_file:
-      - .env
+      - .env.app
     volumes:
       - ./storage/sessions:/data/sessions
       - ./storage/media:/data/media
@@ -58,9 +58,18 @@ services:
 
   api:
     build: .
-    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+    command:
+      [
+        "uvicorn",
+        "app.api.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--proxy-headers",
+      ]
     env_file:
-      - .env
+      - .env.app
     volumes:
       - ./storage/sessions:/data/sessions
       - ./storage/media:/data/media
@@ -74,7 +83,11 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)\""]
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)\"",
+        ]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -86,7 +99,7 @@ services:
     build: .
     command: ["python", "-m", "app.scheduler"]
     env_file:
-      - .env
+      - .env.app
     volumes:
       - ./storage/sessions:/data/sessions
       - ./storage/media:/data/media
@@ -108,7 +121,7 @@ services:
         "--no-autoupdate",
         "run",
         "--token",
-        "${CLOUDFLARE_TUNNEL_TOKEN}",
+        "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}",
       ]
     environment:
       CLOUDFLARE_TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
