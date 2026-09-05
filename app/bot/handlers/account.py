@@ -8,13 +8,11 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import select, update
 
 from app.bot.keyboards.main import back_menu, main_keyboard
-from app.core.config import get_settings
 from app.db.models import Account, Schedule
 from app.db.session import SessionLocal
 from app.userbot import user_client_manager
 
 router = Router()
-settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
@@ -31,12 +29,6 @@ def account_menu(*, connected: bool) -> InlineKeyboardMarkup:
                         text="🗑 قطع اتصال",
                         callback_data="account:disconnect:confirm",
                     ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="🚀 باز کردن Mini App",
-                        web_app=None,
-                    )
                 ],
                 [
                     InlineKeyboardButton(
@@ -104,7 +96,9 @@ async def account_manage(callback: CallbackQuery) -> None:
     if callback.message is not None:
         await callback.message.edit_text(
             _account_text(account),
-            reply_markup=account_menu(connected=bool(account and account.is_connected)),
+            reply_markup=account_menu(
+                connected=bool(account and account.is_connected)
+            ),
         )
 
     await callback.answer()
@@ -118,7 +112,10 @@ async def account_check(callback: CallbackQuery) -> None:
 
     account = await _load_account(callback.from_user.id)
     if account is None:
-        await callback.answer("هنوز اکانتی ثبت نشده است.", show_alert=True)
+        await callback.answer(
+            "هنوز اکانتی ثبت نشده است.",
+            show_alert=True,
+        )
         return
 
     try:
@@ -127,15 +124,25 @@ async def account_check(callback: CallbackQuery) -> None:
             account.session_name,
         )
     except Exception:
-        logger.exception("Failed to check Telegram session for account_id=%s", account.id)
-        await callback.answer("⚠️ بررسی اتصال انجام نشد.", show_alert=True)
+        logger.exception(
+            "Failed to check Telegram session for account_id=%s",
+            account.id,
+        )
+        await callback.answer(
+            "⚠️ بررسی اتصال انجام نشد.",
+            show_alert=True,
+        )
         return
 
     async with SessionLocal() as db:
         current = await db.get(Account, account.id)
         if current is None:
-            await callback.answer("اکانت پیدا نشد.", show_alert=True)
+            await callback.answer(
+                "اکانت پیدا نشد.",
+                show_alert=True,
+            )
             return
+
         current.is_connected = authorized
         await db.commit()
         account = current
@@ -157,7 +164,10 @@ async def account_disconnect_confirm(callback: CallbackQuery) -> None:
 
     account = await _load_account(callback.from_user.id)
     if not account or not account.is_connected:
-        await callback.answer("اکانت از قبل متصل نیست.", show_alert=True)
+        await callback.answer(
+            "اکانت از قبل متصل نیست.",
+            show_alert=True,
+        )
         return
 
     keyboard = InlineKeyboardMarkup(
@@ -180,11 +190,11 @@ async def account_disconnect_confirm(callback: CallbackQuery) -> None:
     if callback.message is not None:
         await callback.message.edit_text(
             "⚠️ <b>قطع اتصال اکانت</b>\n\n"
-            "این عملیات:"
-            "\n• اتصال User Client را قطع می‌کند."
-            "\n• Session محلی را حذف می‌کند."
-            "\n• زمان‌بندی‌های این اکانت را متوقف می‌کند."
-            "\n\nبرای اتصال دوباره، باید فرآیند ورود Telegram را مجدداً انجام دهید.",
+            "این عملیات:\n"
+            "• اتصال User Client را قطع می‌کند.\n"
+            "• Session محلی را حذف می‌کند.\n"
+            "• زمان‌بندی‌های این اکانت را متوقف می‌کند.\n\n"
+            "برای اتصال دوباره، باید فرآیند ورود Telegram را مجدداً انجام دهید.",
             reply_markup=keyboard,
         )
 
@@ -192,7 +202,10 @@ async def account_disconnect_confirm(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "account:disconnect:final")
-async def account_disconnect_final(callback: CallbackQuery, state: FSMContext) -> None:
+async def account_disconnect_final(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
     if callback.from_user is None:
         await callback.answer()
         return
@@ -200,7 +213,10 @@ async def account_disconnect_final(callback: CallbackQuery, state: FSMContext) -
     await state.clear()
     account = await _load_account(callback.from_user.id)
     if not account or not account.is_connected:
-        await callback.answer("اکانت متصل نیست.", show_alert=True)
+        await callback.answer(
+            "اکانت متصل نیست.",
+            show_alert=True,
+        )
         return
 
     try:
@@ -210,8 +226,14 @@ async def account_disconnect_final(callback: CallbackQuery, state: FSMContext) -
             delete_session=True,
         )
     except Exception:
-        logger.exception("Failed to disconnect account_id=%s", account.id)
-        await callback.answer("❌ قطع اتصال انجام نشد.", show_alert=True)
+        logger.exception(
+            "Failed to disconnect account_id=%s",
+            account.id,
+        )
+        await callback.answer(
+            "❌ قطع اتصال انجام نشد.",
+            show_alert=True,
+        )
         return
 
     async with SessionLocal() as db:
@@ -236,13 +258,3 @@ async def account_disconnect_final(callback: CallbackQuery, state: FSMContext) -
         )
 
     await callback.answer("✅ اتصال قطع شد.")
-
-
-@router.callback_query(F.data == "account:back")
-async def account_back(callback: CallbackQuery) -> None:
-    if callback.message is not None:
-        await callback.message.edit_text(
-            "🔐 <b>مدیریت اکانت</b>",
-            reply_markup=back_menu(),
-        )
-    await callback.answer()
