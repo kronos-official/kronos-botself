@@ -5,6 +5,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from app.bot.handlers.account import account_menu, _load_account, _account_text
 from app.bot.keyboards.main import main_keyboard
 
 router = Router()
@@ -25,8 +26,9 @@ MAIN_TEXT = (
 
 HELP_TEXT = (
     "📚 <b>راهنمای Kronos Self</b>\n\n"
-    "<b>🔐 اتصال اکانت</b>\n"
-    "اکانت Telegram خودتان را با شماره، کد ورود و در صورت نیاز 2FA متصل کنید.\n\n"
+    "<b>🔐 مدیریت اکانت</b>\n"
+    "اکانت Telegram خودتان را با شماره، کد ورود و در صورت نیاز 2FA متصل کنید. "
+    "از همین بخش می‌توانید وضعیت Session را بررسی یا اتصال را با تأیید کامل قطع کنید.\n\n"
     "<b>🎯 مقصدها</b>\n"
     "گفتگوهای خصوصی، Botها، گروه‌ها و کانال‌های اکانت متصل را همگام‌سازی و مدیریت کنید.\n\n"
     "<b>⏰ زمان‌بندی‌ها</b>\n"
@@ -44,7 +46,10 @@ async def _show_main(target: Message | CallbackQuery) -> None:
         return
 
     if target.message is not None:
-        await target.message.edit_text(MAIN_TEXT, reply_markup=main_keyboard())
+        await target.message.edit_text(
+            MAIN_TEXT,
+            reply_markup=main_keyboard(),
+        )
     await target.answer()
 
 
@@ -54,7 +59,10 @@ async def start(message: Message, state: FSMContext) -> None:
         return
 
     await state.clear()
-    await message.answer(MAIN_TEXT, reply_markup=main_keyboard())
+    await message.answer(
+        MAIN_TEXT,
+        reply_markup=main_keyboard(),
+    )
 
 
 @router.message(Command("help"))
@@ -62,7 +70,10 @@ async def help_command(message: Message) -> None:
     if not message.from_user:
         return
 
-    await message.answer(HELP_TEXT, reply_markup=main_keyboard())
+    await message.answer(
+        HELP_TEXT,
+        reply_markup=main_keyboard(),
+    )
 
 
 @router.message(Command("panel"))
@@ -70,11 +81,24 @@ async def panel_command(message: Message) -> None:
     if not message.from_user:
         return
 
-    keyboard = main_keyboard()
     await message.answer(
         "🚀 <b>Control Center</b>\n\n"
-        "از منوی زیر پنل موردنظر را باز کنید.",
-        reply_markup=keyboard,
+        "از دکمهٔ پنل Kronos Self برای ورود به Mini App استفاده کنید.",
+        reply_markup=main_keyboard(),
+    )
+
+
+@router.message(Command("account"))
+async def account_command(message: Message) -> None:
+    if not message.from_user:
+        return
+
+    account = await _load_account(message.from_user.id)
+    await message.answer(
+        _account_text(account),
+        reply_markup=account_menu(
+            connected=bool(account and account.is_connected),
+        ),
     )
 
 
