@@ -160,6 +160,7 @@ class AutoClickSetting(Base):
     group_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     group_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    interval_seconds: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     selected_action: Mapped[str] = mapped_column(
         String(64),
         default="فروش ماهی",
