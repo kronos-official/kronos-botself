@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from telethon import TelegramClient
-from telethon.errors import RPCError, SessionPasswordNeededError
+from telethon.errors import RPCError
 from telethon.tl.types import Channel, Chat, User
 
 from app.core.config import get_settings
@@ -15,35 +15,49 @@ class UserClientManager:
     def __init__(self) -> None:
         self.settings = get_settings()
 
-        # One Telethon client per database Account.
         self._clients: dict[int, TelegramClient] = {}
-
-        # General connection locks.
         self._locks: dict[int, asyncio.Lock] = {}
-
-        # Authentication/login locks.
         self._login_locks: dict[int, asyncio.Lock] = {}
 
-        Path(self.settings.sessions_dir).mkdir(
+        Path(
+            self.settings.sessions_dir
+        ).mkdir(
             parents=True,
             exist_ok=True,
         )
 
-    def _lock(self, account_id: int) -> asyncio.Lock:
+    def _lock(
+        self,
+        account_id: int,
+    ) -> asyncio.Lock:
         return self._locks.setdefault(
             account_id,
             asyncio.Lock(),
         )
 
-    def _login_lock(self, account_id: int) -> asyncio.Lock:
+    def _login_lock(
+        self,
+        account_id: int,
+    ) -> asyncio.Lock:
         return self._login_locks.setdefault(
             account_id,
             asyncio.Lock(),
         )
 
-    def _session_path(self, session_name: str) -> str:
+    def _session_path(
+        self,
+        session_name: str,
+    ) -> str:
+        safe_name = Path(session_name).name
+
+        if safe_name != session_name:
+            raise ValueError(
+                "Invalid session name"
+            )
+
         return str(
-            Path(self.settings.sessions_dir) / session_name
+            Path(self.settings.sessions_dir)
+            / safe_name
         )
 
     def client_for(
@@ -51,7 +65,9 @@ class UserClientManager:
         account_id: int,
         session_name: str,
     ) -> TelegramClient:
-        client = self._clients.get(account_id)
+        client = self._clients.get(
+            account_id
+        )
 
         if client is None:
             client = TelegramClient(
@@ -59,7 +75,7 @@ class UserClientManager:
                 self.settings.api_id,
                 self.settings.api_hash,
                 device_model="Kronos Self",
-                app_version="1.3.0",
+                app_version="1.4.0",
                 system_version="Kronos Self",
             )
 
@@ -89,12 +105,6 @@ class UserClientManager:
         session_name: str,
         phone: str,
     ) -> str:
-        """
-        Start the Telegram login flow and send the login code.
-
-        Returns:
-            phone_code_hash
-        """
         async with self._login_lock(account_id):
             client = await self.connect(
                 account_id,
@@ -116,48 +126,20 @@ class UserClientManager:
         phone_code_hash: str,
         password: str | None = None,
     ) -> tuple[bool, Any]:
-        """
-        Finish Telegram authentication.
-
-        Two possible flows exist:
-
-        1. Normal login:
-           phone + code + phone_code_hash
-
-        2. Two-factor authentication:
-           password only
-
-        IMPORTANT:
-        When password is provided, we must NOT call sign_in()
-        with phone/code first. Doing that can make Telethon issue
-        another ResendCodeRequest and Telegram may return
-        SendCodeUnavailableError.
-        """
         async with self._login_lock(account_id):
             client = await self.connect(
                 account_id,
                 session_name,
             )
 
-            # ---------------------------------------------------------
-            # 2FA FLOW
-            # ---------------------------------------------------------
-            #
-            # At this point Telegram has already asked for the
-            # password through SessionPasswordNeededError.
-            #
-            # Do NOT pass phone/code here.
-            #
+            # Once Telegram asks for the 2FA password, do not
+            # repeat the phone/code login request.
             if password is not None:
                 user = await client.sign_in(
                     password=password,
                 )
 
                 return True, user
-
-            # ---------------------------------------------------------
-            # NORMAL CODE FLOW
-            # ---------------------------------------------------------
 
             user = await client.sign_in(
                 phone=phone,
@@ -194,7 +176,7 @@ class UserClientManager:
                 "Telegram user session is not authorized"
             )
 
-        out: list[dict[str, Any]] = []
+        result: list[dict[str, Any]] = []
 
         async for dialog in client.iter_dialogs():
             entity = dialog.entity
@@ -202,10 +184,8 @@ class UserClientManager:
             if isinstance(entity, User):
                 if getattr(entity, "bot", False):
                     kind = "bot"
-
                 elif getattr(entity, "deleted", False):
                     continue
-
                 else:
                     kind = "pm"
 
@@ -222,10 +202,13 @@ class UserClientManager:
             else:
                 kind = "other"
 
-            out.append(
+            result.append(
                 {
                     "peer_id": int(dialog.id),
-                    "title": dialog.title or str(dialog.id),
+                    "title": (
+                        dialog.title
+                        or str(dialog.id)
+                    ),
                     "username": getattr(
                         entity,
                         "username",
@@ -242,7 +225,7 @@ class UserClientManager:
                 }
             )
 
-        return out
+        return result
 
     async def send(
         self,
@@ -268,9 +251,6 @@ class UserClientManager:
             )
         )
 
-        # ---------------------------------------------------------
-        # TEXT MESSAGE
-        # ---------------------------------------------------------
         if kind == "text":
             text = str(
                 payload.get(
@@ -292,9 +272,6 @@ class UserClientManager:
                 ),
             )
 
-        # ---------------------------------------------------------
-        # MEDIA MESSAGE
-        # ---------------------------------------------------------
         file_path = payload.get(
             "file_path"
         )
@@ -309,13 +286,16 @@ class UserClientManager:
         ).resolve()
 
         candidate = Path(
-            file_path
+            str(file_path)
         ).resolve()
 
-        # Prevent files outside the configured media directory.
-        if media_root not in candidate.parents:
+        if (
+            candidate != media_root
+            and media_root not in candidate.parents
+        ):
             raise ValueError(
-                "Media path is outside the configured media directory"
+                "Media path is outside "
+                "the configured media directory"
             )
 
         if not candidate.is_file():
@@ -329,17 +309,20 @@ class UserClientManager:
             caption=payload.get(
                 "caption"
             ),
-            force_document=kind == "document",
-            supports_streaming=kind == "video",
+            force_document=(
+                kind == "document"
+            ),
+            supports_streaming=(
+                kind == "video"
+            ),
         )
 
     async def disconnect_all(self) -> None:
-        """
-        Disconnect every active Telethon client.
-        """
-        for client in tuple(
+        clients = tuple(
             self._clients.values()
-        ):
+        )
+
+        for client in clients:
             if client.is_connected():
                 try:
                     await client.disconnect()
