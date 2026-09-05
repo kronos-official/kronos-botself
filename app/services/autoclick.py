@@ -8,8 +8,6 @@ from typing import Any
 
 from telethon.errors import FloodWaitError, RPCError
 
-from app.userbot import user_client_manager
-
 logger = logging.getLogger(__name__)
 
 AUTOCLICK_BOT_USERNAME = "MeowieQBot"
@@ -165,6 +163,8 @@ async def execute_autoclick(
     lock = _lock_for(account_id)
     if lock.locked():
         raise AutoClickBusy("برای این اکانت یک اجرای اتوکلیک دیگر در حال انجام است.")
+
+    from app.userbot import user_client_manager
 
     started = time.perf_counter()
 
