@@ -26,12 +26,21 @@ from pathlib import Path
 
 path = Path("/app/miniapp/index.html")
 text = path.read_text(encoding="utf-8")
-marker = '<script src="/miniapp/dom-guard.js"></script>'
 
-if marker not in text:
+head_marker = '<script src="/miniapp/dom-guard.js"></script>'
+body_marker = '<script src="/miniapp/runtime-v2.js"></script>'
+
+if head_marker not in text:
     text = text.replace(
         "</head>",
-        f"{marker}</head>",
+        f"{head_marker}</head>",
+        1,
+    )
+
+if body_marker not in text:
+    text = text.replace(
+        "</body>",
+        f"{body_marker}</body>",
         1,
     )
 
