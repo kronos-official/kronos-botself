@@ -13,10 +13,13 @@ from app.core.logging import setup_logging
 from app.db.models import Account, DeliveryLog, Schedule
 from app.db.repository import claim_schedule, due_schedule_ids
 from app.db.session import SessionLocal
+from app.services.autoclick import enabled_autoclick_account_ids, run_autoclick_worker
 from app.services.scheduling import calculate_next_run
 from app.userbot import user_client_manager
 
 logger = logging.getLogger(__name__)
+
+AUTOCLICK_RECONCILE_SECONDS = 1.0
 
 
 async def process_schedule(schedule_id: int) -> None:
@@ -110,18 +113,66 @@ async def _get_due_ids(limit: int) -> list[int]:
         return await due_schedule_ids(db, limit=limit)
 
 
+async def _reconcile_autoclick_workers(
+    workers: dict[int, asyncio.Task[None]],
+) -> None:
+    desired = await enabled_autoclick_account_ids()
+
+    for account_id in list(workers):
+        task = workers[account_id]
+        if account_id not in desired or task.done():
+            if not task.done():
+                task.cancel()
+            workers.pop(account_id, None)
+
+    for account_id in desired:
+        if account_id in workers:
+            continue
+        workers[account_id] = asyncio.create_task(
+            run_autoclick_worker(account_id),
+            name=f"autoclick-{account_id}",
+        )
+        logger.info("AutoClick worker scheduled account_id=%s", account_id)
+
+
+async def _wait_and_reap_workers(workers: dict[int, asyncio.Task[None]]) -> None:
+    done_accounts = [account_id for account_id, task in workers.items() if task.done()]
+    for account_id in done_accounts:
+        task = workers.pop(account_id)
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("AutoClick worker crashed account_id=%s", account_id)
+
+
 async def loop() -> None:
     settings = get_settings()
     setup_logging(settings.log_level)
     logger.info("Kronos Self Scheduler started")
+
+    autoclick_workers: dict[int, asyncio.Task[None]] = {}
     try:
+        last_autoclick_reconcile = 0.0
+
         while True:
             try:
                 await run_once()
+                now_mono = time.monotonic()
+                if now_mono - last_autoclick_reconcile >= AUTOCLICK_RECONCILE_SECONDS:
+                    await _reconcile_autoclick_workers(autoclick_workers)
+                    last_autoclick_reconcile = now_mono
+                await _wait_and_reap_workers(autoclick_workers)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.exception("Scheduler loop error")
-            await asyncio.sleep(settings.scheduler_poll_seconds)
+
+            await asyncio.sleep(min(max(settings.scheduler_poll_seconds, 0.5), 2.0))
     finally:
+        for task in autoclick_workers.values():
+            task.cancel()
+        if autoclick_workers:
+            await asyncio.gather(*autoclick_workers.values(), return_exceptions=True)
         await user_client_manager.disconnect_all()
