@@ -19,7 +19,7 @@ from app.userbot import user_client_manager
 
 logger = logging.getLogger(__name__)
 
-AUTOCLICK_RECONCILE_SECONDS = 1.0
+AUTOCLICK_RECONCILE_SECONDS = 0.5
 
 
 async def process_schedule(schedule_id: int) -> None:
@@ -158,18 +158,19 @@ async def loop() -> None:
 
         while True:
             try:
-                await run_once()
                 now_mono = time.monotonic()
                 if now_mono - last_autoclick_reconcile >= AUTOCLICK_RECONCILE_SECONDS:
                     await _reconcile_autoclick_workers(autoclick_workers)
                     last_autoclick_reconcile = now_mono
+
                 await _wait_and_reap_workers(autoclick_workers)
+                await run_once()
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.exception("Scheduler loop error")
 
-            await asyncio.sleep(min(max(settings.scheduler_poll_seconds, 0.5), 2.0))
+            await asyncio.sleep(min(max(settings.scheduler_poll_seconds, 0.5), 1.0))
     finally:
         for task in autoclick_workers.values():
             task.cancel()
