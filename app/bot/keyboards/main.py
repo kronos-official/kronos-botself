@@ -7,6 +7,7 @@ def miniapp_button() -> InlineKeyboardMarkup:
     settings = get_settings()
     if not settings.webapp_url:
         return InlineKeyboardMarkup(inline_keyboard=[])
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -22,7 +23,12 @@ def miniapp_button() -> InlineKeyboardMarkup:
 def back_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="back:main")]
+            [
+                InlineKeyboardButton(
+                    text="⬅️ بازگشت به منوی اصلی",
+                    callback_data="back:main",
+                )
+            ]
         ]
     )
 
@@ -43,16 +49,37 @@ def main_keyboard() -> InlineKeyboardMarkup:
 
     rows.extend(
         [
-            [InlineKeyboardButton(text="🔐 اتصال اکانت", callback_data="account:connect")],
             [
-                InlineKeyboardButton(text="🎯 مقصدها", callback_data="destinations:list"),
-                InlineKeyboardButton(text="⏰ زمان‌بندی‌ها", callback_data="schedules:list"),
+                InlineKeyboardButton(
+                    text="🔐 اتصال اکانت",
+                    callback_data="account:connect",
+                ),
+                InlineKeyboardButton(
+                    text="📊 وضعیت",
+                    callback_data="status",
+                ),
             ],
             [
-                InlineKeyboardButton(text="📊 وضعیت", callback_data="status"),
-                InlineKeyboardButton(text="🎫 پشتیبانی", callback_data="support:info"),
+                InlineKeyboardButton(
+                    text="🎯 مقصدها",
+                    callback_data="destinations:list",
+                ),
+                InlineKeyboardButton(
+                    text="⏰ زمان‌بندی‌ها",
+                    callback_data="schedules:list",
+                ),
             ],
-            [InlineKeyboardButton(text="📋 راهنما", callback_data="help")],
+            [
+                InlineKeyboardButton(
+                    text="🎫 پشتیبانی",
+                    callback_data="support:info",
+                ),
+                InlineKeyboardButton(
+                    text="📋 راهنما",
+                    callback_data="help",
+                ),
+            ],
         ]
     )
+
     return InlineKeyboardMarkup(inline_keyboard=rows)
