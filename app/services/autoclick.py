@@ -6,11 +6,17 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import select
 from telethon.errors import FloodWaitError, RPCError
+
+from app.db.models import Account, AutoClickSetting
+from app.db.session import SessionLocal
+from app.userbot import user_client_manager
 
 logger = logging.getLogger(__name__)
 
 AUTOCLICK_BOT_USERNAME = "MeowieQBot"
+FISH_TRIGGER_TEXT = "ماهی"
 
 ACTION_SELL = "فروش ماهی"
 ACTION_FEED = "بده پیشی بخوره"
@@ -21,6 +27,10 @@ ALLOWED_ACTIONS = {
     ACTION_FEED,
     ACTION_FRIDGE,
 }
+
+MIN_INTERVAL_SECONDS = 1
+MAX_INTERVAL_SECONDS = 86400
+MENU_TIMEOUT_SECONDS = 20.0
 
 
 class AutoClickError(RuntimeError):
@@ -85,21 +95,44 @@ def button_matches(actual: str | None, expected: str) -> bool:
     return normalize_button_text(actual) == normalize_button_text(expected)
 
 
+async def _load_worker_state(account_id: int) -> tuple[Account | None, AutoClickSetting | None]:
+    async with SessionLocal() as db:
+        account = await db.get(Account, account_id)
+        if not account:
+            return None, None
+
+        result = await db.execute(
+            select(AutoClickSetting).where(
+                AutoClickSetting.account_id == account_id
+            )
+        )
+        setting = result.scalar_one_or_none()
+        return account, setting
+
+
+async def enabled_autoclick_account_ids() -> set[int]:
+    async with SessionLocal() as db:
+        result = await db.execute(
+            select(AutoClickSetting.account_id)
+            .join(Account, Account.id == AutoClickSetting.account_id)
+            .where(
+                AutoClickSetting.enabled.is_(True),
+                AutoClickSetting.group_peer_id.is_not(None),
+                Account.is_connected.is_(True),
+            )
+        )
+        return {int(row[0]) for row in result.all()}
+
+
 async def _find_meowie_menu(
     client: Any,
     group_id: int,
     bot_id: int,
     trigger_message_id: int,
     *,
-    timeout: float = 20.0,
+    timeout: float = MENU_TIMEOUT_SECONDS,
 ):
-    """Find the bot's inline-keyboard response after the trigger message.
-
-    Telegram can expose bot-originated messages through different fields
-    depending on the chat/message shape. We therefore prefer sender/via-bot
-    matches, but accept a post-trigger message containing the expected
-    AutoClick buttons when the sender metadata is not directly available.
-    """
+    """Find the special bot menu only after a fresh «ماهی» message."""
     deadline = time.monotonic() + timeout
     expected_buttons = {normalize_button_text(action) for action in ALLOWED_ACTIONS}
 
@@ -140,11 +173,11 @@ async def _find_meowie_menu(
             candidates.sort(key=lambda item: (item[0], -int(item[1].id)))
             return candidates[0][1]
 
-        await asyncio.sleep(0.4)
+        await asyncio.sleep(0.35)
 
     raise AutoClickNotFound(
         "منوی @MeowieQBot بعد از ارسال «ماهی» پیدا نشد. "
-        "بررسی کنید ربات در گروه حضور داشته باشد و بتواند به پیام‌ها پاسخ دهد."
+        "ربات باید در گروه حاضر باشد و بتواند به «ماهی» پاسخ بدهد."
     )
 
 
@@ -153,37 +186,26 @@ async def _click_action(menu_message: Any, action: str) -> str:
         raise AutoClickError("عملیات اتوکلیک نامعتبر است.")
 
     if not menu_message.buttons:
-        raise AutoClickButtonNotFound(
-            "پیام ربات هیچ Inline Keyboard ندارد."
-        )
+        raise AutoClickButtonNotFound("پیام ربات هیچ Inline Keyboard ندارد.")
 
     expected = normalize_button_text(action)
 
     for row in menu_message.buttons:
         for button in row:
             actual = normalize_button_text(getattr(button, "text", None))
-            if actual == expected:
-                try:
-                    await button.click()
-                except RPCError as exc:
-                    raise AutoClickError(
-                        f"کلیک روی «{action}» توسط Telegram رد شد: {exc}"
-                    ) from exc
-                return actual
+            if actual != expected:
+                continue
+            try:
+                await button.click()
+            except RPCError as exc:
+                raise AutoClickError(
+                    f"کلیک روی «{action}» توسط Telegram رد شد: {exc}"
+                ) from exc
+            return actual
 
-    try:
-        await menu_message.click(
-            text=lambda text: normalize_button_text(text) == expected
-        )
-        return action
-    except RPCError as exc:
-        raise AutoClickError(
-            f"کلیک روی «{action}» توسط Telegram رد شد: {exc}"
-        ) from exc
-    except Exception as exc:
-        raise AutoClickButtonNotFound(
-            f"دکمه «{action}» در منوی ربات پیدا نشد."
-        ) from exc
+    raise AutoClickButtonNotFound(
+        f"دکمه «{action}» در منوی ربات پیدا نشد."
+    )
 
 
 async def execute_autoclick(
@@ -193,6 +215,7 @@ async def execute_autoclick(
     group_id: int,
     action: str,
 ) -> AutoClickResult:
+    """Run exactly one fish -> menu -> click cycle."""
     if action not in ALLOWED_ACTIONS:
         raise AutoClickError("عملیات اتوکلیک نامعتبر است.")
 
@@ -202,24 +225,22 @@ async def execute_autoclick(
             "برای این اکانت یک اجرای اتوکلیک دیگر در حال انجام است."
         )
 
-    from app.userbot import user_client_manager
-
     started = time.perf_counter()
 
     async with lock:
         try:
             client = await user_client_manager.connect(account_id, session_name)
-        except Exception as exc:
-            raise AutoClickError(
-                f"اتصال به Session تلگرام انجام نشد: {exc}"
-            ) from exc
-
-        try:
             if not await client.is_user_authorized():
                 raise AutoClickUnauthorized("اکانت Telegram مجاز نیست.")
+        except AutoClickError:
+            raise
         except RPCError as exc:
             raise AutoClickError(
                 f"بررسی Session تلگرام ناموفق بود: {exc}"
+            ) from exc
+        except Exception as exc:
+            raise AutoClickError(
+                f"اتصال به Session تلگرام انجام نشد: {exc}"
             ) from exc
 
         try:
@@ -231,83 +252,96 @@ async def execute_autoclick(
 
         bot_id = int(bot.id)
 
-        logger.info(
-            "AutoClick started account_id=%s group_id=%s action=%s",
-            account_id,
-            group_id,
-            action,
-        )
-
         try:
-            trigger = await client.send_message(group_id, "میو")
-            await asyncio.sleep(0.45)
-
-            menu_trigger = await client.send_message(group_id, "ماهی")
-
+            trigger = await client.send_message(group_id, FISH_TRIGGER_TEXT)
             menu = await _find_meowie_menu(
                 client,
                 group_id,
                 bot_id,
-                menu_trigger.id,
-                timeout=20.0,
+                trigger.id,
             )
-
             clicked = await _click_action(menu, action)
-            elapsed_ms = int((time.perf_counter() - started) * 1000)
-
-            logger.info(
-                "AutoClick succeeded account_id=%s group_id=%s action=%s menu_message_id=%s elapsed_ms=%s",
-                account_id,
-                group_id,
-                action,
-                menu.id,
-                elapsed_ms,
-            )
-
-            return AutoClickResult(
-                ok=True,
-                group_id=group_id,
-                action=action,
-                trigger_message_id=trigger.id,
-                menu_message_id=menu.id,
-                clicked_button=clicked,
-                elapsed_ms=elapsed_ms,
-            )
-
         except FloodWaitError as exc:
-            logger.exception(
-                "AutoClick FloodWait account_id=%s group_id=%s wait=%s",
-                account_id,
-                group_id,
-                exc.seconds,
-            )
             raise AutoClickError(
-                f"Telegram به‌صورت موقت محدود کرده است؛ {exc.seconds} ثانیه بعد دوباره تلاش کنید."
+                f"Telegram موقتاً محدود کرده است؛ {exc.seconds} ثانیه صبر لازم است."
             ) from exc
+        except AutoClickError:
+            raise
         except RPCError as exc:
-            logger.exception(
-                "AutoClick Telegram RPC error account_id=%s group_id=%s",
-                account_id,
-                group_id,
-            )
             raise AutoClickError(
                 f"خطای Telegram در اجرای اتوکلیک: {exc}"
             ) from exc
-        except AutoClickError:
-            logger.exception(
-                "AutoClick controlled failure account_id=%s group_id=%s action=%s",
-                account_id,
-                group_id,
-                action,
-            )
-            raise
         except Exception as exc:
-            logger.exception(
-                "AutoClick failed account_id=%s group_id=%s action=%s",
-                account_id,
-                group_id,
-                action,
-            )
             raise AutoClickError(
-                f"اجرای اتوکلیک ناموفق بود: {exc}"
+                f"اجرای یک چرخه اتوکلیک ناموفق بود: {exc}"
             ) from exc
+
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "AutoClick cycle succeeded account_id=%s group_id=%s action=%s menu_message_id=%s elapsed_ms=%s",
+            account_id,
+            group_id,
+            action,
+            menu.id,
+            elapsed_ms,
+        )
+
+        return AutoClickResult(
+            ok=True,
+            group_id=group_id,
+            action=action,
+            trigger_message_id=trigger.id,
+            menu_message_id=menu.id,
+            clicked_button=clicked,
+            elapsed_ms=elapsed_ms,
+        )
+
+
+async def run_autoclick_worker(account_id: int) -> None:
+    """Persistent per-account worker. It resumes automatically while enabled."""
+    logger.info("AutoClick worker started account_id=%s", account_id)
+
+    try:
+        while True:
+            account, setting = await _load_worker_state(account_id)
+
+            if not account or not setting:
+                return
+            if not account.is_connected or not setting.enabled or not setting.group_peer_id:
+                return
+
+            interval = max(
+                MIN_INTERVAL_SECONDS,
+                min(int(setting.interval_seconds or 10), MAX_INTERVAL_SECONDS),
+            )
+            action = setting.selected_action
+            group_id = int(setting.group_peer_id)
+
+            if action not in ALLOWED_ACTIONS:
+                logger.error(
+                    "AutoClick worker stopping: invalid action account_id=%s action=%r",
+                    account_id,
+                    action,
+                )
+                return
+
+            try:
+                await execute_autoclick(
+                    account_id=account.id,
+                    session_name=account.session_name,
+                    group_id=group_id,
+                    action=action,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.exception(
+                    "AutoClick cycle failed account_id=%s group_id=%s: %s",
+                    account_id,
+                    group_id,
+                    exc,
+                )
+
+            await asyncio.sleep(interval)
+    finally:
+        logger.info("AutoClick worker stopped account_id=%s", account_id)
