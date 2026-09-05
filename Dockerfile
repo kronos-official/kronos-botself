@@ -20,6 +20,17 @@ COPY miniapp ./miniapp
 COPY alembic.ini ./
 COPY alembic ./alembic
 
+RUN python - <<'PY'
+from pathlib import Path
+
+path = Path('/app/miniapp/index.html')
+text = path.read_text(encoding='utf-8')
+marker = '<script src="/miniapp/dom-guard.js"></script>'
+if marker not in text:
+    text = text.replace('</head>', f'{marker}</head>', 1)
+    path.write_text(text, encoding='utf-8')
+PY
+
 RUN mkdir -p /data/sessions /data/media \
     && chmod 700 /data/sessions /data/media
 
