@@ -22,6 +22,7 @@ async def _configure_bot(bot: Bot, logger: logging.Logger) -> None:
             commands=[
                 BotCommand(command="start", description="شروع و نمایش منوی اصلی"),
                 BotCommand(command="panel", description="باز کردن منوی Kronos Self"),
+                BotCommand(command="account", description="مدیریت اکانت Telegram"),
                 BotCommand(command="help", description="راهنمای استفاده"),
                 BotCommand(command="new_schedule", description="ساخت زمان‌بندی جدید"),
                 BotCommand(command="cancel", description="لغو فرایند جاری"),
@@ -58,7 +59,6 @@ async def main() -> None:
     storage = RedisStorage(redis=redis)
     dp = Dispatcher(storage=storage)
 
-    # Order matters: common/start first, then account/auth flows, then features.
     dp.include_router(common.router)
     dp.include_router(account.router)
     dp.include_router(auth.router)
