@@ -51,11 +51,11 @@ def main_keyboard() -> InlineKeyboardMarkup:
         [
             [
                 InlineKeyboardButton(
-                    text="🔐 اتصال اکانت",
-                    callback_data="account:connect",
+                    text="🔐 مدیریت اکانت",
+                    callback_data="account:manage",
                 ),
                 InlineKeyboardButton(
-                    text="📊 وضعیت",
+                    text="📊 وضعیت سیستم",
                     callback_data="status",
                 ),
             ],
