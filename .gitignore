@@ -1,0 +1,33 @@
+# Secrets / local configuration
+.env
+.env.*
+!.env.example
+
+# Telegram sessions and journals
+storage/sessions/
+*.session
+*.session-journal
+
+# User media / runtime data
+storage/media/
+storage/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Local infrastructure artifacts
+cloudflared
+*.backup
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
