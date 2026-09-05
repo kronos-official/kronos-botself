@@ -2,9 +2,9 @@
   "use strict";
 
   const ACTIONS = [
-    { value: "فروش ماهی", icon: "🐟", title: "فروش ماهی", description: "اجرای گزینه فروش ماهی" },
-    { value: "بده پیشی بخوره", icon: "🐱", title: "بده پیشی بخوره", description: "اجرای گزینه غذا دادن به پیشی" },
-    { value: "بندازش توی یخچال", icon: "🧊", title: "بندازش توی یخچال", description: "اجرای گزینه قرار دادن در یخچال" },
+    { value: "فروش ماهی", icon: "🐟", title: "فروش ماهی", description: "گزینه فروش ماهی را از منوی ربات اجرا می‌کند." },
+    { value: "بده پیشی بخوره", icon: "🐱", title: "بده پیشی بخوره", description: "گزینه غذا دادن به پیشی را اجرا می‌کند." },
+    { value: "بندازش توی یخچال", icon: "🧊", title: "بندازش توی یخچال", description: "گزینه قرار دادن در یخچال را اجرا می‌کند." },
   ];
 
   const state = {
@@ -29,17 +29,20 @@
       .replaceAll("'", "&#039;");
   }
 
-  function message(text, type = "info") {
-    const node = el("acMessage");
-    if (!node) return;
-    node.textContent = String(text || "");
-    node.className = `ac-message ${type}`;
+  function notify(text, type = "info") {
+    const rootMessage = el("acMessage");
+    if (rootMessage) {
+      rootMessage.textContent = String(text || "");
+      rootMessage.className = `ac-message ${type}${text ? " visible" : ""}`;
+    }
+
+    if (typeof window.notice === "function" && text) {
+      window.notice(text, type);
+    }
   }
 
   async function api(path, options = {}) {
-    if (typeof window.api === "function") {
-      return window.api(path, options);
-    }
+    if (typeof window.api === "function") return window.api(path, options);
 
     const headers = { ...(options.headers || {}) };
     const token = localStorage.getItem("kronos_self_token");
@@ -53,12 +56,7 @@
       headers["Content-Type"] = "application/json";
     }
 
-    const response = await fetch(path, {
-      ...options,
-      headers,
-      cache: "no-store",
-    });
-
+    const response = await fetch(path, { ...options, headers, cache: "no-store" });
     const text = await response.text();
     let data = {};
     try {
@@ -86,219 +84,98 @@
     style.textContent = `
       #kronos-autoclick-root {
         display: none !important;
-        position: relative !important;
         width: min(1120px, 100%) !important;
         margin: 0 auto 110px !important;
-        padding: 0 !important;
         box-sizing: border-box !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-        z-index: 60 !important;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity .2s ease, transform .2s ease;
       }
-
-      #kronos-autoclick-root.ac-open {
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-      }
-
-      #kronos-autoclick-root,
-      #kronos-autoclick-root * {
-        box-sizing: border-box;
-      }
-
-      main.ac-main-hidden {
-        display: none !important;
-      }
-
-      #desktopNav {
-        grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
-      }
-
-      .bottom {
-        grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
-      }
+      #kronos-autoclick-root.ac-open { display:block !important; opacity:1; transform:none; }
+      #kronos-autoclick-root, #kronos-autoclick-root * { box-sizing:border-box; }
+      main.ac-main-hidden { display:none !important; }
+      #desktopNav { grid-template-columns:repeat(7,minmax(0,1fr)) !important; }
+      .bottom { grid-template-columns:repeat(7,minmax(0,1fr)) !important; }
 
       #kronos-autoclick-root .ac-shell {
-        width: 100%;
-        padding: 16px;
-        border-radius: 24px;
-        border: 1px solid rgba(149,168,199,.16);
+        overflow:hidden;
+        border:1px solid rgba(149,168,199,.14);
+        border-radius:26px;
         background:
-          radial-gradient(650px 240px at 100% 0%, rgba(77,126,241,.14), transparent 65%),
-          linear-gradient(180deg, rgba(18,26,39,.99), rgba(8,13,21,.99));
-        box-shadow: 0 24px 70px rgba(0,0,0,.38);
+          radial-gradient(900px 320px at 100% -10%, rgba(77,126,241,.20), transparent 62%),
+          radial-gradient(600px 260px at 0% 100%, rgba(82,221,255,.07), transparent 64%),
+          linear-gradient(180deg, rgba(17,25,38,.99), rgba(7,12,19,.99));
+        box-shadow:0 28px 90px rgba(0,0,0,.38);
       }
 
-      #kronos-autoclick-root .ac-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 14px;
-      }
+      #kronos-autoclick-root .ac-hero { padding:22px 20px 18px; border-bottom:1px solid rgba(149,168,199,.10); }
+      #kronos-autoclick-root .ac-hero-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+      #kronos-autoclick-root .ac-kicker { color:#75a3de; font-size:8px; font-weight:950; letter-spacing:.16em; }
+      #kronos-autoclick-root .ac-title { margin-top:5px; font-size:clamp(22px,5vw,30px); line-height:1.15; font-weight:950; }
+      #kronos-autoclick-root .ac-description { max-width:720px; margin-top:8px; color:#8290a6; font-size:9px; line-height:1.9; }
+      #kronos-autoclick-root .ac-status { min-width:90px; padding:9px 11px; border-radius:999px; text-align:center; color:#9da9ba; background:rgba(128,138,153,.09); border:1px solid rgba(149,168,199,.14); font-size:8px; font-weight:950; }
+      #kronos-autoclick-root .ac-status.on { color:#9ff0c7; background:rgba(80,212,147,.09); border-color:rgba(80,212,147,.25); }
+      #kronos-autoclick-root .ac-status.busy { color:#aed0ff; background:rgba(77,126,241,.12); border-color:rgba(102,164,255,.24); }
+      #kronos-autoclick-root .ac-message { display:none; margin:14px 20px 0; padding:11px 13px; border-radius:14px; font-size:9px; line-height:1.8; white-space:pre-wrap; }
+      #kronos-autoclick-root .ac-message.visible { display:block; }
+      #kronos-autoclick-root .ac-message.info { color:#b4d2ff; background:rgba(77,125,255,.10); border:1px solid rgba(102,164,255,.18); }
+      #kronos-autoclick-root .ac-message.success { color:#a0edc6; background:rgba(80,212,147,.08); border:1px solid rgba(80,212,147,.18); }
+      #kronos-autoclick-root .ac-message.error { color:#ffb0bc; background:rgba(139,35,55,.14); border:1px solid rgba(255,111,131,.20); }
 
-      #kronos-autoclick-root .ac-title {
-        margin-top: 3px;
-        font-size: 20px;
-        line-height: 1.3;
-        font-weight: 950;
-      }
+      #kronos-autoclick-root .ac-body { padding:16px 20px 20px; }
+      #kronos-autoclick-root .ac-grid { display:grid; grid-template-columns:1.05fr .95fr; gap:12px; }
+      #kronos-autoclick-root .ac-card { padding:15px; border:1px solid rgba(149,168,199,.11); border-radius:19px; background:rgba(7,12,19,.58); }
+      #kronos-autoclick-root .ac-card-title { font-size:11px; font-weight:950; }
+      #kronos-autoclick-root .ac-card-subtitle { margin-top:4px; color:#8290a6; font-size:8px; line-height:1.7; }
 
-      #kronos-autoclick-root .ac-subtitle {
-        margin-top: 6px;
-        color: #8290a6;
-        font-size: 9px;
-        line-height: 1.9;
-      }
+      #kronos-autoclick-root .ac-groups { display:grid; gap:7px; margin-top:12px; max-height:320px; overflow:auto; }
+      #kronos-autoclick-root .ac-group { width:100%; display:flex; align-items:center; gap:10px; padding:11px; text-align:right; color:#f4f7ff; background:#0b111a; border:1px solid rgba(149,168,199,.12); border-radius:15px; cursor:pointer; transition:border-color .16s ease, background .16s ease, transform .16s ease; }
+      #kronos-autoclick-root .ac-group:hover, #kronos-autoclick-root .ac-action:hover { transform:translateY(-1px); }
+      #kronos-autoclick-root .ac-group.active, #kronos-autoclick-root .ac-action.active { border-color:rgba(102,164,255,.52); background:linear-gradient(135deg,rgba(77,125,255,.15),rgba(77,125,255,.06)); }
+      #kronos-autoclick-root .ac-group-icon { width:38px; height:38px; display:grid; place-items:center; border-radius:12px; background:#152031; font-size:18px; flex:none; }
+      #kronos-autoclick-root .ac-group-name { display:block; font-size:9px; font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      #kronos-autoclick-root .ac-group-meta { display:block; margin-top:3px; color:#8290a6; font-size:7px; }
+      #kronos-autoclick-root .ac-check { margin-inline-start:auto; color:#7f8da1; font-size:12px; }
+      #kronos-autoclick-root .ac-group.active .ac-check { color:#9ff0c7; }
 
-      #kronos-autoclick-root .ac-status {
-        flex: none;
-        padding: 7px 10px;
-        border-radius: 999px;
-        color: #aab4c2;
-        background: rgba(128,138,153,.10);
-        border: 1px solid rgba(149,168,199,.15);
-        font-size: 8px;
-        font-weight: 900;
-      }
+      #kronos-autoclick-root .ac-actions { display:grid; gap:7px; margin-top:12px; }
+      #kronos-autoclick-root .ac-action { width:100%; display:flex; align-items:center; gap:10px; padding:10px; text-align:right; color:#f4f7ff; background:#0b111a; border:1px solid rgba(149,168,199,.12); border-radius:15px; cursor:pointer; transition:border-color .16s ease, background .16s ease, transform .16s ease; }
+      #kronos-autoclick-root .ac-action-icon { width:42px; height:42px; display:grid; place-items:center; border-radius:13px; background:linear-gradient(145deg,#17283e,#0d1727); font-size:20px; flex:none; }
+      #kronos-autoclick-root .ac-action-title { display:block; font-size:9px; font-weight:950; }
+      #kronos-autoclick-root .ac-action-description { display:block; margin-top:3px; color:#8290a6; font-size:7px; line-height:1.65; }
 
-      #kronos-autoclick-root .ac-status.on {
-        color: #9ff0c7;
-        background: rgba(80,212,147,.09);
-        border-color: rgba(80,212,147,.22);
-      }
+      #kronos-autoclick-root .ac-settings { display:grid; gap:10px; margin-top:12px; }
+      #kronos-autoclick-root .ac-setting { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; border-radius:15px; background:#0b111a; border:1px solid rgba(149,168,199,.12); }
+      #kronos-autoclick-root .ac-setting strong { display:block; font-size:9px; }
+      #kronos-autoclick-root .ac-setting small { display:block; margin-top:3px; color:#8290a6; font-size:7px; }
+      #kronos-autoclick-root .ac-switch { position:relative; width:48px; height:27px; flex:none; }
+      #kronos-autoclick-root .ac-switch input { position:absolute; width:1px; height:1px; opacity:0; }
+      #kronos-autoclick-root .ac-switch span { position:absolute; inset:0; border-radius:999px; background:#293444; border:1px solid rgba(255,255,255,.08); cursor:pointer; }
+      #kronos-autoclick-root .ac-switch span::before { content:""; position:absolute; top:3px; left:3px; width:19px; height:19px; border-radius:50%; background:#c7d0dc; transition:transform .18s ease,background .18s ease; }
+      #kronos-autoclick-root .ac-switch input:checked + span { background:rgba(80,212,147,.25); border-color:rgba(80,212,147,.35); }
+      #kronos-autoclick-root .ac-switch input:checked + span::before { transform:translateX(21px); background:#9ff0c7; }
 
-      #kronos-autoclick-root .ac-message {
-        display: none;
-        margin-bottom: 10px;
-        padding: 10px 12px;
-        border-radius: 14px;
-        font-size: 9px;
-        line-height: 1.8;
-        white-space: pre-wrap;
-      }
+      #kronos-autoclick-root .ac-bottom { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+      #kronos-autoclick-root .ac-button { border:0; border-radius:14px; padding:12px; color:#f4f7ff; font-size:9px; font-weight:950; cursor:pointer; }
+      #kronos-autoclick-root .ac-button.primary { background:linear-gradient(135deg,#4d7ef1,#67a1ff); box-shadow:0 10px 28px rgba(77,126,241,.17); }
+      #kronos-autoclick-root .ac-button.secondary { background:#172231; border:1px solid rgba(149,168,199,.12); }
+      #kronos-autoclick-root .ac-button:disabled { opacity:.55; cursor:wait; }
 
-      #kronos-autoclick-root .ac-message.info,
-      #kronos-autoclick-root .ac-message.success,
-      #kronos-autoclick-root .ac-message.error {
-        display: block;
-      }
+      #kronos-autoclick-root .ac-result { margin-top:12px; padding:12px; border-radius:15px; border:1px solid rgba(149,168,199,.11); background:rgba(7,12,19,.72); }
+      #kronos-autoclick-root .ac-result-head { display:flex; align-items:center; gap:7px; font-size:8px; color:#8290a6; }
+      #kronos-autoclick-root .ac-result-body { margin-top:7px; font-size:9px; line-height:1.85; }
+      #kronos-autoclick-root .ac-result-body strong { color:#9ff0c7; }
+      #kronos-autoclick-root .ac-empty { padding:18px 10px; text-align:center; color:#8290a6; border:1px dashed rgba(149,168,199,.14); border-radius:14px; font-size:8px; line-height:1.8; }
+      #kronos-autoclick-root .ac-spinner { width:15px; height:15px; display:inline-block; border:2px solid #2a3547; border-top-color:#66a4ff; border-radius:50%; animation:ac-spin .75s linear infinite; vertical-align:middle; }
+      @keyframes ac-spin { to { transform:rotate(360deg); } }
 
-      #kronos-autoclick-root .ac-message.info { color: #add0ff; background: rgba(77,125,255,.10); border: 1px solid rgba(102,164,255,.18); }
-      #kronos-autoclick-root .ac-message.success { color: #9cebc3; background: rgba(80,212,147,.08); border: 1px solid rgba(80,212,147,.18); }
-      #kronos-autoclick-root .ac-message.error { color: #ffabb8; background: rgba(139,35,55,.13); border: 1px solid rgba(255,111,131,.20); }
-
-      #kronos-autoclick-root .ac-section { margin-top: 15px; }
-      #kronos-autoclick-root .ac-label { margin-bottom: 7px; font-size: 9px; font-weight: 950; }
-      #kronos-autoclick-root .ac-groups,
-      #kronos-autoclick-root .ac-actions { display: grid; gap: 8px; }
-
-      #kronos-autoclick-root .ac-group,
-      #kronos-autoclick-root .ac-action,
-      #kronos-autoclick-root .ac-button {
-        appearance: none;
-        -webkit-appearance: none;
-        font: inherit;
-      }
-
-      #kronos-autoclick-root .ac-group,
-      #kronos-autoclick-root .ac-action {
-        width: 100%;
-        color: #f4f7ff;
-        text-align: right;
-        background: #0b111a;
-        border: 1px solid rgba(149,168,199,.14);
-        border-radius: 16px;
-        cursor: pointer;
-      }
-
-      #kronos-autoclick-root .ac-group { padding: 12px; }
-      #kronos-autoclick-root .ac-group.active,
-      #kronos-autoclick-root .ac-action.active {
-        border-color: rgba(102,164,255,.50);
-        background: rgba(77,125,255,.12);
-      }
-
-      #kronos-autoclick-root .ac-group-title,
-      #kronos-autoclick-root .ac-action-title {
-        font-size: 10px;
-        font-weight: 900;
-      }
-
-      #kronos-autoclick-root .ac-group-meta,
-      #kronos-autoclick-root .ac-action-description {
-        display: block;
-        margin-top: 4px;
-        color: #8290a6;
-        font-size: 8px;
-        line-height: 1.65;
-      }
-
-      #kronos-autoclick-root .ac-action {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px;
-      }
-
-      #kronos-autoclick-root .ac-icon {
-        width: 40px;
-        height: 40px;
-        flex: none;
-        display: grid;
-        place-items: center;
-        border-radius: 13px;
-        background: #152031;
-        font-size: 19px;
-      }
-
-      #kronos-autoclick-root .ac-toggle {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 12px;
-        border-radius: 16px;
-        background: #0b111a;
-        border: 1px solid rgba(149,168,199,.14);
-      }
-
-      #kronos-autoclick-root .ac-toggle strong { font-size: 10px; }
-      #kronos-autoclick-root .ac-toggle small { display: block; margin-top: 4px; color: #8290a6; font-size: 8px; }
-
-      #kronos-autoclick-root .ac-switch { position: relative; width: 48px; height: 26px; flex: none; }
-      #kronos-autoclick-root .ac-switch input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-      #kronos-autoclick-root .ac-switch span { position: absolute; inset: 0; border-radius: 999px; background: #293444; border: 1px solid rgba(255,255,255,.08); cursor: pointer; }
-      #kronos-autoclick-root .ac-switch span::before { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #c7d0dc; transition: transform .18s ease, background .18s ease; }
-      #kronos-autoclick-root .ac-switch input:checked + span { background: rgba(80,212,147,.25); border-color: rgba(80,212,147,.35); }
-      #kronos-autoclick-root .ac-switch input:checked + span::before { transform: translateX(21px); background: #9ff0c7; }
-
-      #kronos-autoclick-root .ac-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-      #kronos-autoclick-root .ac-button { width: 100%; padding: 13px; border-radius: 14px; border: 1px solid rgba(96,143,232,.20); color: white; cursor: pointer; font-size: 10px; font-weight: 950; }
-      #kronos-autoclick-root .ac-button.primary { background: linear-gradient(135deg,#4d7ef1,#67a1ff); }
-      #kronos-autoclick-root .ac-button.secondary { background: #172231; border-color: rgba(149,168,199,.14); }
-      #kronos-autoclick-root .ac-button:disabled { opacity: .55; cursor: wait; }
-
-      #kronos-autoclick-root .ac-result,
-      #kronos-autoclick-root .ac-empty {
-        padding: 12px;
-        border-radius: 14px;
-        background: #0b111a;
-        border: 1px solid rgba(149,168,199,.12);
-        color: #b8c5d7;
-        font-size: 8px;
-        line-height: 1.8;
-      }
-
-      #kronos-autoclick-root .ac-empty { text-align: center; color: #8290a6; }
-      #kronos-autoclick-root .ac-result strong { color: #9cebc3; }
-      #kronos-autoclick-root .ac-note { margin-top: 10px; padding: 10px; border-radius: 13px; background: #090e16; border: 1px solid rgba(149,168,199,.10); color: #8290a6; font-size: 8px; line-height: 1.8; }
-
-      @media (max-width: 640px) {
-        #kronos-autoclick-root .ac-buttons { grid-template-columns: 1fr; }
+      @media (max-width:860px) { #kronos-autoclick-root .ac-grid { grid-template-columns:1fr; } }
+      @media (max-width:600px) {
+        #kronos-autoclick-root .ac-body { padding:12px; }
+        #kronos-autoclick-root .ac-hero { padding:17px 14px 14px; }
+        #kronos-autoclick-root .ac-message { margin-inline:14px; }
+        #kronos-autoclick-root .ac-bottom { grid-template-columns:1fr; }
+        #kronos-autoclick-root .ac-groups { max-height:260px; }
       }
     `;
     document.head.appendChild(style);
@@ -312,55 +189,59 @@
     node.id = "kronos-autoclick-root";
     node.innerHTML = `
       <div class="ac-shell">
-        <div class="ac-header">
-          <div>
-            <div class="eyebrow">TELEGRAM AUTOCLICK</div>
-            <div class="ac-title">⚡ اتوکلیک</div>
-            <div class="ac-subtitle">گروه را انتخاب کنید، عملیات را مشخص کنید و اجرای خودکار را فعال نمایید.</div>
+        <div class="ac-hero">
+          <div class="ac-hero-top">
+            <div>
+              <div class="ac-kicker">KRONOS AUTOMATION ENGINE</div>
+              <div class="ac-title">⚡ AutoClick</div>
+              <div class="ac-description">اجرای خودکار @MeowieQBot با کنترل کامل روی گروه مقصد، عملیات و وضعیت فعال بودن سرویس.</div>
+            </div>
+            <div id="acStatus" class="ac-status">غیرفعال</div>
           </div>
-          <div id="acStatus" class="ac-status">غیرفعال</div>
         </div>
 
         <div id="acMessage" class="ac-message" aria-live="polite"></div>
 
-        <div class="ac-section">
-          <div class="ac-label">گروه مقصد</div>
-          <div id="acGroups" class="ac-groups">
-            <div class="ac-empty">در حال دریافت گروه‌ها…</div>
-          </div>
-        </div>
-
-        <div class="ac-section">
-          <div class="ac-label">عملیات</div>
-          <div id="acActions" class="ac-actions"></div>
-        </div>
-
-        <div class="ac-section">
-          <div class="ac-toggle">
-            <div>
-              <strong>فعال‌سازی اتوکلیک</strong>
-              <small>پس از انتخاب گروه و عملیات، تنظیمات را ذخیره کنید.</small>
+        <div class="ac-body">
+          <div class="ac-grid">
+            <div class="ac-card">
+              <div class="ac-card-title">🎯 گروه مقصد</div>
+              <div class="ac-card-subtitle">گروه موردنظر برای دریافت فرمان‌های AutoClick را انتخاب کنید.</div>
+              <div id="acGroups" class="ac-groups"><div class="ac-empty"><span class="ac-spinner"></span> در حال دریافت گروه‌ها…</div></div>
             </div>
-            <label class="ac-switch">
-              <input id="acEnabled" type="checkbox" aria-label="فعال‌سازی اتوکلیک">
-              <span></span>
-            </label>
+
+            <div class="ac-card">
+              <div class="ac-card-title">🧩 عملیات</div>
+              <div class="ac-card-subtitle">یکی از گزینه‌های منوی @MeowieQBot را مشخص کنید.</div>
+              <div id="acActions" class="ac-actions"></div>
+
+              <div class="ac-settings">
+                <div class="ac-setting">
+                  <div><strong>فعال‌سازی AutoClick</strong><small>برای اجرای تست باید سرویس فعال و پیکربندی شده باشد.</small></div>
+                  <label class="ac-switch"><input id="acEnabled" type="checkbox"><span></span></label>
+                </div>
+              </div>
+
+              <div class="ac-bottom">
+                <button id="acSave" type="button" class="ac-button secondary">💾 ذخیره تنظیمات</button>
+                <button id="acRun" type="button" class="ac-button primary">▶ اجرای تست</button>
+              </div>
+
+              <div id="acResult" class="ac-result">
+                <div class="ac-result-head">◉ آخرین وضعیت اجرا</div>
+                <div class="ac-result-body">هنوز اجرایی انجام نشده است.</div>
+              </div>
+            </div>
           </div>
         </div>
-
-        <div class="ac-buttons">
-          <button id="acSave" type="button" class="ac-button secondary">💾 ذخیره تنظیمات</button>
-          <button id="acRun" type="button" class="ac-button primary">⚡ اجرای تست</button>
-        </div>
-
-        <div id="acResult" class="ac-result">هنوز اجرایی انجام نشده است.</div>
-        <div class="ac-note">Kronos از User Session کاربر استفاده می‌کند و پس از ارسال پیام‌های موردنیاز، پاسخ @MeowieQBot را پیدا کرده و دکمه انتخاب‌شده را کلیک می‌کند.</div>
       </div>
     `;
 
     const app = document.querySelector(".app");
     if (app) {
-      app.insertAdjacentElement("afterend", node);
+      const main = app.querySelector("main");
+      if (main) main.insertAdjacentElement("beforebegin", node);
+      else app.appendChild(node);
     } else {
       document.body.appendChild(node);
     }
@@ -377,7 +258,7 @@
 
     node.innerHTML = ACTIONS.map((action) => `
       <button type="button" class="ac-action ${state.action === action.value ? "active" : ""}" data-ac-action="${esc(action.value)}">
-        <span class="ac-icon" aria-hidden="true">${action.icon}</span>
+        <span class="ac-action-icon">${action.icon}</span>
         <span>
           <span class="ac-action-title">${esc(action.title)}</span>
           <span class="ac-action-description">${esc(action.description)}</span>
@@ -390,6 +271,7 @@
         state.action = button.dataset.acAction || ACTIONS[0].value;
         renderActions();
         renderState();
+        setMessage(null);
       });
     });
   }
@@ -399,17 +281,22 @@
     if (!node) return;
 
     if (!state.groups.length) {
-      node.innerHTML = '<div class="ac-empty">هیچ گروه فعالی پیدا نشد. ابتدا از بخش «مقصدها» همگام‌سازی کنید.</div>';
+      node.innerHTML = '<div class="ac-empty">هیچ گروه فعالی پیدا نشد.<br>ابتدا گفتگوها را از بخش «مقصدها» همگام‌سازی کنید.</div>';
       return;
     }
 
     node.innerHTML = state.groups.map((group) => {
       const id = Number(group.id);
       const active = id === Number(state.groupId);
+      const meta = group.username ? `@${esc(group.username)}` : "Telegram Group";
       return `
         <button type="button" class="ac-group ${active ? "active" : ""}" data-ac-group-id="${esc(id)}">
-          <div class="ac-group-title">${esc(group.title || "گروه بدون نام")}</div>
-          <span class="ac-group-meta">${group.username ? `@${esc(group.username)}` : "گروه Telegram"}</span>
+          <span class="ac-group-icon">👥</span>
+          <span>
+            <span class="ac-group-name">${esc(group.title || "گروه بدون نام")}</span>
+            <span class="ac-group-meta">${meta}</span>
+          </span>
+          <span class="ac-check">${active ? "✓" : "○"}</span>
         </button>
       `;
     }).join("");
@@ -419,6 +306,7 @@
         state.groupId = Number(button.dataset.acGroupId);
         renderGroups();
         renderState();
+        setMessage(null);
       });
     });
   }
@@ -430,13 +318,30 @@
     const run = el("acRun");
 
     if (status) {
-      status.textContent = state.enabled ? "فعال" : "غیرفعال";
-      status.classList.toggle("on", Boolean(state.enabled));
+      status.textContent = state.running ? "در حال اجرا…" : state.enabled ? "فعال" : "غیرفعال";
+      status.className = `ac-status${state.running ? " busy" : state.enabled ? " on" : ""}`;
     }
 
     if (enabled) enabled.checked = Boolean(state.enabled);
     if (save) save.disabled = state.loading || state.running;
     if (run) run.disabled = state.loading || state.running || !state.enabled || !state.groupId;
+  }
+
+  function renderResult(text, success = false, data = null) {
+    const node = el("acResult");
+    if (!node) return;
+
+    if (!text) {
+      node.innerHTML = '<div class="ac-result-head">◉ آخرین وضعیت اجرا</div><div class="ac-result-body">هنوز اجرایی انجام نشده است.</div>';
+      return;
+    }
+
+    if (success && data) {
+      node.innerHTML = `<div class="ac-result-head">✅ اجرای آخر موفق</div><div class="ac-result-body"><strong>${esc(data.action || state.action)}</strong><br>گروه: ${esc(data.group?.title || "-")}<br>دکمه: ${esc(data.clicked_button || "-")}<br>زمان اجرا: ${esc(data.elapsed_ms ?? "-")} ms</div>`;
+      return;
+    }
+
+    node.innerHTML = `<div class="ac-result-head">⚠️ وضعیت اجرا</div><div class="ac-result-body">${esc(text)}</div>`;
   }
 
   function matchSavedGroup() {
@@ -452,7 +357,7 @@
 
     state.loading = true;
     renderState();
-    message("در حال بارگذاری تنظیمات اتوکلیک…", "info");
+    setMessage("در حال بارگذاری تنظیمات…", "info");
 
     try {
       const [setting, groups] = await Promise.all([
@@ -469,11 +374,12 @@
       matchSavedGroup();
       renderActions();
       renderGroups();
-      renderState();
-      message("", "info");
+      renderResult(null);
+      setMessage(null);
     } catch (error) {
       console.error("Kronos AutoClick load failed:", error);
-      message(error?.message || "بارگذاری اتوکلیک ناموفق بود.", "error");
+      renderResult(error?.message || "بارگذاری AutoClick ناموفق بود.");
+      setMessage(error?.message || "بارگذاری AutoClick ناموفق بود.", "error");
     } finally {
       state.loading = false;
       renderState();
@@ -498,20 +404,18 @@
     renderActions();
     renderGroups();
     renderState();
-    message("✅ تنظیمات اتوکلیک ذخیره شد.", "success");
+    setMessage("تنظیمات AutoClick ذخیره شد.", "success");
   }
 
   async function execute() {
     if (state.running) return;
-    if (!state.groupId) return message("ابتدا یک گروه مقصد انتخاب کنید.", "error");
-    if (!state.enabled) return message("ابتدا اتوکلیک را فعال کنید و تنظیمات را ذخیره کنید.", "error");
+    if (!state.groupId) return setMessage("ابتدا یک گروه مقصد انتخاب کنید.", "error");
+    if (!state.enabled) return setMessage("ابتدا AutoClick را فعال کنید و تنظیمات را ذخیره کنید.", "error");
 
     state.running = true;
     renderState();
-    message("در حال اجرای اتوکلیک…", "info");
-
-    const result = el("acResult");
-    if (result) result.textContent = "در حال اجرای عملیات…";
+    renderResult("در حال ارسال فرمان به Telegram و پیدا کردن منوی ربات…");
+    setMessage("در حال اجرای تست AutoClick…", "info");
 
     try {
       const data = await api("/api/autoclick/execute", {
@@ -519,15 +423,13 @@
         body: JSON.stringify({ action: state.action }),
       });
 
-      if (result) {
-        result.innerHTML = `<strong>✅ اجرا موفق بود</strong><br>عملیات: ${esc(data.action || state.action)}<br>گروه: ${esc(data.group?.title || "-")}<br>دکمه: ${esc(data.clicked_button || "-")}<br>زمان: ${esc(data.elapsed_ms ?? "-")} ms`;
-      }
-
-      message("✅ اتوکلیک با موفقیت اجرا شد.", "success");
+      renderResult(null, true, data);
+      setMessage("AutoClick با موفقیت اجرا شد.", "success");
     } catch (error) {
       console.error("Kronos AutoClick execution failed:", error);
-      if (result) result.textContent = "اجرای اتوکلیک ناموفق بود.";
-      message(error?.message || "اجرای اتوکلیک ناموفق بود.", "error");
+      const text = error?.message || "اجرای اتوکلیک ناموفق بود.";
+      renderResult(text);
+      setMessage(text, "error");
     } finally {
       state.running = false;
       renderState();
@@ -538,6 +440,7 @@
     el("acEnabled")?.addEventListener("change", (event) => {
       state.enabled = Boolean(event.target.checked);
       renderState();
+      setMessage(null);
     });
 
     el("acSave")?.addEventListener("click", async () => {
@@ -546,7 +449,7 @@
         await saveSettings();
       } catch (error) {
         console.error("Kronos AutoClick save failed:", error);
-        message(error?.message || "ذخیره تنظیمات ناموفق بود.", "error");
+        setMessage(error?.message || "ذخیره تنظیمات ناموفق بود.", "error");
       }
     });
 
@@ -614,6 +517,18 @@
     window.showTab = bridge;
   }
 
+  function setMessage(text, type = "info") {
+    const node = el("acMessage");
+    if (!node) return;
+    if (!text) {
+      node.textContent = "";
+      node.className = "ac-message";
+      return;
+    }
+    node.textContent = String(text);
+    node.className = `ac-message ${type} visible`;
+  }
+
   function boot() {
     try {
       injectStyles();
@@ -624,7 +539,6 @@
       window.setTimeout(installNavigation, 500);
       window.setTimeout(bridgeShowTab, 100);
       window.setTimeout(bridgeShowTab, 500);
-      console.info("Kronos AutoClick UI ready");
     } catch (error) {
       console.error("Kronos AutoClick bootstrap failed:", error);
     }
