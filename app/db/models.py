@@ -39,6 +39,11 @@ class Account(Base):
 
     destinations: Mapped[list[Destination]] = relationship(back_populates="account", cascade="all, delete-orphan")
     schedules: Mapped[list[Schedule]] = relationship(back_populates="account", cascade="all, delete-orphan")
+    autoclick: Mapped[AutoClickSetting | None] = relationship(
+        back_populates="account",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
 
 class Destination(Base):
@@ -139,4 +144,40 @@ class SupportTicketEvent(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-    ticket: Mapped[SupportTicket] = relationship(back_populates="events")
+    ticket: Mapped[SupportTicketEvent] = relationship(back_populates="ticket")
+
+
+class AutoClickSetting(Base):
+    __tablename__ = "autoclick_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+    group_peer_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    group_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    group_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    selected_action: Mapped[str] = mapped_column(
+        String(64),
+        default="فروش ماهی",
+        nullable=False,
+    )
+    bot_username: Mapped[str] = mapped_column(
+        String(255),
+        default="MeowieQBot",
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    account: Mapped[Account] = relationship(back_populates="autoclick")
