@@ -30,7 +30,12 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q app tests
 
+      - name: Prepare CI environment files
+        run: cp .env.example .env.app
+
       - name: Validate Docker Compose
+        env:
+          CLOUDFLARE_TUNNEL_TOKEN: ci-placeholder
         run: docker compose config -q
 
       - name: Run tests
