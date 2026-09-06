@@ -125,27 +125,31 @@ async def _message_has_supported_button(message: Any) -> bool:
     return False
 
 
-async def _find_meowie_menu(
+async def _send_fish_and_wait_for_menu(
     client: Any,
     group_id: int,
     bot_id: int,
-    trigger_message_id: int,
     *,
     timeout: float = MENU_TIMEOUT_SECONDS,
-):
-    """Wait for the fresh Meowie response instead of repeatedly polling history.
+) -> tuple[Any, Any]:
+    """Send a fresh fish message while listening for the exact Meowie response.
 
-    The event handlers are installed before the fish message is sent, so a fast
-    Meowie response cannot race past the detector. Both newly-created and edited
-    messages are observed because some bot flows may edit an existing message.
+    The event listeners are installed before the trigger is sent, eliminating a
+    race where a fast bot response could arrive before the detector starts.
+    Both newly-created and edited messages are handled.
     """
     loop = asyncio.get_running_loop()
     future: asyncio.Future[Any] = loop.create_future()
+    trigger_message: Any | None = None
 
     async def handle_event(event: Any) -> None:
         try:
             message = getattr(event, "message", None)
-            if not message or message.id <= trigger_message_id:
+            if not message:
+                return
+            if trigger_message is None:
+                return
+            if int(message.id) <= int(trigger_message.id):
                 return
 
             chat_id = getattr(event, "chat_id", None)
@@ -157,8 +161,7 @@ async def _find_meowie_menu(
 
             sender_id = getattr(message, "sender_id", None)
             via_bot_id = getattr(message, "via_bot_id", None)
-            is_bot_message = sender_id == bot_id or via_bot_id == bot_id
-            if not is_bot_message:
+            if sender_id != bot_id and via_bot_id != bot_id:
                 return
 
             if not future.done():
@@ -173,7 +176,9 @@ async def _find_meowie_menu(
     client.add_event_handler(message_edited_handler)
 
     try:
-        return await asyncio.wait_for(future, timeout=timeout)
+        trigger_message = await client.send_message(group_id, FISH_TRIGGER_TEXT)
+        menu_message = await asyncio.wait_for(future, timeout=timeout)
+        return trigger_message, menu_message
     except asyncio.TimeoutError as exc:
         raise AutoClickNotFound(
             "منوی @MeowieQBot بعد از ارسال «ماهی» پیدا نشد. ربات باید در گروه حاضر باشد و بتواند به «ماهی» پاسخ بدهد."
@@ -236,42 +241,11 @@ async def execute_autoclick(
             bot_id = int(bot.id)
             logger.info("AutoClick cycle started account_id=%s group_id=%s action=%s", account_id, group_id, action)
 
-            wait_task = asyncio.create_task(
-                _find_meowie_menu(
-                    client,
-                    group_id,
-                    bot_id,
-                    trigger_message_id=0,
-                )
+            trigger, menu = await _send_fish_and_wait_for_menu(
+                client,
+                group_id,
+                bot_id,
             )
-            try:
-                trigger = await client.send_message(group_id, FISH_TRIGGER_TEXT)
-                wait_task.cancel()
-                try:
-                    await wait_task
-                except asyncio.CancelledError:
-                    pass
-                menu = await _find_meowie_menu(
-                    client,
-                    group_id,
-                    bot_id,
-                    trigger.id,
-                )
-            except FloodWaitError as exc:
-                wait_task.cancel()
-                try:
-                    await wait_task
-                except asyncio.CancelledError:
-                    pass
-                raise AutoClickError(f"Telegram موقتاً محدود کرده است؛ {exc.seconds} ثانیه صبر لازم است.") from exc
-            except Exception:
-                wait_task.cancel()
-                try:
-                    await wait_task
-                except asyncio.CancelledError:
-                    pass
-                raise
-
             clicked = await _click_action(menu, action)
         except FloodWaitError as exc:
             raise AutoClickError(f"Telegram موقتاً محدود کرده است؛ {exc.seconds} ثانیه صبر لازم است.") from exc
