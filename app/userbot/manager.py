@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -155,46 +157,115 @@ class UserClientManager:
                     if root in resolved.parents and resolved.is_file():
                         resolved.unlink(missing_ok=True)
 
+    def _snapshot_session(self, session_name: str, destination: Path) -> None:
+        """Create a transactionally consistent SQLite snapshot of a live Telethon session."""
+        source_path = Path(self._session_path(session_name)).resolve()
+        if not source_path.is_file():
+            raise FileNotFoundError("Telegram session file does not exist")
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        source_uri = f"file:{source_path.as_posix()}?mode=ro"
+
+        source = sqlite3.connect(
+            source_uri,
+            uri=True,
+            timeout=30.0,
+            check_same_thread=False,
+        )
+        target = sqlite3.connect(
+            str(destination),
+            timeout=30.0,
+            check_same_thread=False,
+        )
+
+        try:
+            source.backup(
+                target,
+                pages=100,
+                sleep=0.05,
+            )
+            target.commit()
+        finally:
+            target.close()
+            source.close()
+
     async def sync_dialogs(
         self,
         account_id: int,
         session_name: str,
     ) -> list[dict[str, Any]]:
-        client = await self.connect(account_id, session_name)
+        """Read dialogs from an isolated SQLite snapshot, never the live session file.
 
-        if not await client.is_user_authorized():
-            raise RuntimeError("Telegram user session is not authorized")
+        The Scheduler keeps the live Telethon session connected for long-running
+        automation. Opening that same SQLite session from the API process causes
+        cross-process SQLite write contention and can raise `database is locked`.
+        A transactionally consistent snapshot lets the API sync dialogs without
+        touching the Scheduler-owned session database.
+        """
+        with tempfile.TemporaryDirectory(prefix=f"kronos-dialogs-{account_id}-") as temp_dir:
+            snapshot_path = Path(temp_dir) / Path(session_name).name
 
-        result: list[dict[str, Any]] = []
+            try:
+                await asyncio.to_thread(
+                    self._snapshot_session,
+                    session_name,
+                    snapshot_path,
+                )
+            except sqlite3.Error as exc:
+                raise RuntimeError(
+                    f"Telegram session snapshot failed: {exc}"
+                ) from exc
 
-        async for dialog in client.iter_dialogs():
-            entity = dialog.entity
-
-            if isinstance(entity, User):
-                if getattr(entity, "bot", False):
-                    kind = "bot"
-                elif getattr(entity, "deleted", False):
-                    continue
-                else:
-                    kind = "pm"
-            elif isinstance(entity, Channel):
-                kind = "channel" if getattr(entity, "broadcast", False) else "group"
-            elif isinstance(entity, Chat):
-                kind = "group"
-            else:
-                kind = "other"
-
-            result.append(
-                {
-                    "peer_id": int(dialog.id),
-                    "title": dialog.title or str(dialog.id),
-                    "username": getattr(entity, "username", None),
-                    "kind": kind,
-                    "verified": bool(getattr(entity, "verified", False)),
-                }
+            client = TelegramClient(
+                str(snapshot_path),
+                self.settings.api_id,
+                self.settings.api_hash,
+                device_model="Kronos Self Dialog Sync",
+                app_version="1.5.0",
+                system_version="Kronos Self",
             )
 
-        return result
+            try:
+                await client.connect()
+
+                if not await client.is_user_authorized():
+                    raise RuntimeError("Telegram user session is not authorized")
+
+                result: list[dict[str, Any]] = []
+
+                async for dialog in client.iter_dialogs():
+                    entity = dialog.entity
+
+                    if isinstance(entity, User):
+                        if getattr(entity, "bot", False):
+                            kind = "bot"
+                        elif getattr(entity, "deleted", False):
+                            continue
+                        else:
+                            kind = "pm"
+                    elif isinstance(entity, Channel):
+                        kind = "channel" if getattr(entity, "broadcast", False) else "group"
+                    elif isinstance(entity, Chat):
+                        kind = "group"
+                    else:
+                        kind = "other"
+
+                    result.append(
+                        {
+                            "peer_id": int(dialog.id),
+                            "title": dialog.title or str(dialog.id),
+                            "username": getattr(entity, "username", None),
+                            "kind": kind,
+                            "verified": bool(getattr(entity, "verified", False)),
+                        }
+                    )
+
+                return result
+            finally:
+                try:
+                    await client.disconnect()
+                except (OSError, RPCError):
+                    pass
 
     async def send(
         self,
