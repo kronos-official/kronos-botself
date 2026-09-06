@@ -7,9 +7,13 @@ Revises: 0004_autoclick
 from alembic import op
 import sqlalchemy as sa
 
+
 revision = "0005_autoclick_interval"
+
 down_revision = "0004_autoclick"
+
 branch_labels = None
+
 depends_on = None
 
 
@@ -26,4 +30,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("autoclick_settings", "interval_seconds")
+    op.drop_column(
+        "autoclick_settings",
+        "interval_seconds",
+    )
